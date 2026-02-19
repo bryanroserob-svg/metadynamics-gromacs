@@ -1,0 +1,68 @@
+; npt.mdp — Equilibración NPT (100 ps)
+; Presión Parrinello-Rahman + V-rescale, manteniendo restraints
+
+title       = NPT Equilibration
+define      = -DPOSRES -DPOSRES_LIG
+
+; PARÁMETROS DE EJECUCIÓN
+integrator  = md
+nsteps      = 50000         ; 100 ps
+dt          = 0.002
+
+; CONTROL DE OUTPUT
+nstxout             = 5000
+nstvout             = 5000
+nstenergy           = 5000
+nstlog              = 5000
+nstxout-compressed  = 5000
+
+; BONDS
+continuation         = yes       ; Continuación desde NVT
+constraint_algorithm = lincs
+constraints          = h-bonds
+lincs_iter           = 1
+lincs_order          = 4
+
+; LISTA DE VECINOS
+cutoff-scheme   = Verlet
+nstlist         = 20
+ns_type         = grid
+rlist           = 1.2
+
+; VAN DER WAALS (CHARMM36: force-switch)
+vdwtype                  = cutoff
+vdw-modifier             = force-switch
+rvdw-switch              = 1.0
+rvdw                     = 1.2
+DispCorr                 = no
+
+; ELECTROSTÁTICA
+coulombtype     = PME
+rcoulomb        = 1.2
+pme_order       = 4
+fourierspacing  = 0.16
+
+; ACOPLAMIENTO DE TEMPERATURA
+tcoupl      = V-rescale
+tc-grps     = Protein_Ligand Solvent
+tau_t       = 0.1     0.1
+ref_t       = 300     300
+
+; ACOPLAMIENTO DE PRESIÓN
+pcoupl              = Parrinello-Rahman
+pcoupltype          = isotropic
+tau_p               = 5.0
+ref_p               = 1.0
+compressibility     = 4.5e-5
+refcoord_scaling    = com
+
+; CONDICIONES DE CONTORNO
+pbc         = xyz
+
+; GENERACIÓN DE VELOCIDADES
+gen_vel     = no             ; Velocidades de NVT
+
+; COM MOTION
+nstcomm     = 10
+comm-mode   = Linear
+comm-grps   = System

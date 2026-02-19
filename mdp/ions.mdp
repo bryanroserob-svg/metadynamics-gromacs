@@ -1,0 +1,23 @@
+; ions.mdp — Configuración mínima para genion
+; Solo se usa para generar el .tpr necesario para añadir iones
+
+; PARÁMETROS DE EJECUCIÓN
+integrator  = steep         ; Steepest descent (no se corre realmente)
+emtol       = 1000.0
+emstep      = 0.01
+nsteps      = 50000
+
+; LISTA DE VECINOS
+nstlist     = 1
+cutoff-scheme = Verlet
+ns_type     = grid
+rlist       = 1.2
+rcoulomb    = 1.2
+rvdw        = 1.2
+
+; ELECTROSTÁTICA
+coulombtype = cutoff
+vdw-type    = cutoff
+
+; CONDICIONES DE CONTORNO
+pbc         = xyz

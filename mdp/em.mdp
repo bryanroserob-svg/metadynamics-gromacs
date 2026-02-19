@@ -1,0 +1,37 @@
+; em.mdp — Minimización de Energía
+; Steepest descent para eliminar contactos desfavorables
+
+title       = Energy Minimization
+
+; PARÁMETROS DE INTEGRACIÓN
+integrator  = steep         ; Steepest descent
+emtol       = 1000.0       ; Fuerza max (kJ/mol/nm) para convergencia
+emstep      = 0.01         ; Paso inicial (nm)
+nsteps      = 50000        ; Pasos máximos de minimización
+
+; CONTROL DE OUTPUT
+nstxout     = 500
+nstlog      = 500
+nstenergy   = 500
+
+; LISTA DE VECINOS
+nstlist         = 10
+cutoff-scheme   = Verlet
+ns_type         = grid
+rlist           = 1.2
+
+; VAN DER WAALS (CHARMM36: force-switch)
+vdwtype                  = cutoff
+vdw-modifier             = force-switch
+rvdw-switch              = 1.0
+rvdw                     = 1.2
+DispCorr                 = no
+
+; ELECTROSTÁTICA
+coulombtype     = PME
+rcoulomb        = 1.2
+pme_order       = 4
+fourierspacing  = 0.16
+
+; CONDICIONES DE CONTORNO
+pbc             = xyz

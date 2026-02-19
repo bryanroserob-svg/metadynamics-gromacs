@@ -1,0 +1,65 @@
+; nvt.mdp — Equilibración NVT (100 ps)
+; Termostato V-rescale para equilibrar temperatura manteniendo restraints
+
+title       = NVT Equilibration
+define      = -DPOSRES -DPOSRES_LIG     ; Restraints en proteína y ligando
+
+; PARÁMETROS DE EJECUCIÓN
+integrator  = md
+nsteps      = 50000         ; 50000 × 0.002 = 100 ps
+dt          = 0.002         ; 2 fs
+
+; CONTROL DE OUTPUT
+nstxout             = 5000      ; Coord. cada 10 ps
+nstvout             = 5000
+nstenergy           = 5000
+nstlog              = 5000
+nstxout-compressed  = 5000
+
+; BONDS
+continuation         = no
+constraint_algorithm = lincs
+constraints          = h-bonds
+lincs_iter           = 1
+lincs_order          = 4
+
+; LISTA DE VECINOS
+cutoff-scheme   = Verlet
+nstlist         = 20
+ns_type         = grid
+rlist           = 1.2
+
+; VAN DER WAALS (CHARMM36: force-switch)
+vdwtype                  = cutoff
+vdw-modifier             = force-switch
+rvdw-switch              = 1.0
+rvdw                     = 1.2
+DispCorr                 = no
+
+; ELECTROSTÁTICA
+coulombtype     = PME
+rcoulomb        = 1.2
+pme_order       = 4
+fourierspacing  = 0.16
+
+; ACOPLAMIENTO DE TEMPERATURA
+tcoupl      = V-rescale
+tc-grps     = Protein_Ligand Solvent
+tau_t       = 0.1     0.1
+ref_t       = 300     300
+
+; SIN ACOPLAMIENTO DE PRESIÓN (NVT)
+pcoupl      = no
+
+; CONDICIONES DE CONTORNO
+pbc         = xyz
+
+; GENERACIÓN DE VELOCIDADES
+gen_vel     = yes
+gen_temp    = 300
+gen_seed    = -1
+
+; COM MOTION
+nstcomm     = 10
+comm-mode   = Linear
+comm-grps   = System
