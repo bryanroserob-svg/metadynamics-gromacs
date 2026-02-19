@@ -521,7 +521,7 @@ setup_directory_structure() {
     RUNDIR="$INITIAL_DIR/$WORKDIR/${name_suffix}_$(date +%Y%m%d_%H%M%S)"
 
     for d in 00_setup 01_minimization 02_nvt 03_npt 04_metadynamics \
-             05_analysis 06_plots logs mdp_used; do
+             05_analysis 07_plots logs mdp_used; do
         create_dir "$RUNDIR/$d"
     done
     cp "$INITIAL_DIR/$BASE_MDP"/*.mdp "$RUNDIR/mdp_used/"
@@ -815,6 +815,7 @@ generate_plumed_input() {
     plumed_args+=("--pace" "$METAD_PACE")
     plumed_args+=("--biasfactor" "$METAD_BIASFACTOR")
     plumed_args+=("--temp" "$METAD_TEMP")
+    plumed_args+=("--dt" "${DT:-0.002}")
     plumed_args+=("--output" "$RUNDIR/04_metadynamics/plumed.dat")
 
     for wall in "${WALL_SPECS[@]+"${WALL_SPECS[@]}"}"; do

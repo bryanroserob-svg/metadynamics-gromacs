@@ -21,6 +21,7 @@ import argparse
 import os
 import sys
 import subprocess
+import tempfile
 import numpy as np
 from pathlib import Path
 
@@ -58,6 +59,9 @@ def run_sum_hills(hills_file, output_prefix, args, time_blocks=None):
         output_prefix: Prefijo para archivos de salida.
         args: Argumentos CLI.
         time_blocks: Lista de tiempos máximos para análisis de convergencia.
+            NOTE: For temporal convergence, compute_deltaG_vs_time uses its own
+            slice-and-filter approach (more correct). This parameter is kept for
+            API compatibility but the recommended path is the slice-based method.
     
     Returns:
         Lista de archivos FES generados.
@@ -86,23 +90,31 @@ def run_sum_hills(hills_file, output_prefix, args, time_blocks=None):
         fes_files.append(f"{output_prefix}_fes.dat")
         print(f"  ✓ FES generado: {output_prefix}_fes.dat")
     else:
-        # FES por bloques temporales (convergencia)
-        for t_max in time_blocks:
-            out_file = f"{output_prefix}_fes_t{t_max:.0f}.dat"
-            cmd = [
-                "plumed", "sum_hills",
-                "--hills", hills_file,
-                "--outfile", out_file,
-                "--mintozero",
-                "--stride", str(int(t_max)),
-            ]
-            
-            if args.kt:
-                cmd.extend(["--kt", str(args.kt)])
-            
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                fes_files.append(out_file)
+        # FES por bloques temporales (convergencia).
+        # NOTE: PLUMED --stride means "use every Nth line from HILLS", NOT
+        # "up to time t_max". For proper temporal slicing, use
+        # compute_deltaG_vs_time which filters HILLS by time explicitly.
+        # Here we load the HILLS data once and write filtered temp files.
+        hills_data = load_plumed_file(hills_file)
+        with tempfile.TemporaryDirectory(prefix="metad_sumhills_") as tmpdir:
+            for t_max in time_blocks:
+                mask = hills_data[:, 0] <= t_max
+                if not np.any(mask):
+                    continue
+                temp_hills = os.path.join(tmpdir, f"hills_t{t_max:.0f}.dat")
+                np.savetxt(temp_hills, hills_data[mask], fmt='%.6f')
+                out_file = f"{output_prefix}_fes_t{t_max:.0f}.dat"
+                cmd = [
+                    "plumed", "sum_hills",
+                    "--hills", temp_hills,
+                    "--outfile", out_file,
+                    "--mintozero",
+                ]
+                if args.kt:
+                    cmd.extend(["--kt", str(args.kt)])
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    fes_files.append(out_file)
         
         print(f"  ✓ {len(fes_files)} FES parciales generados")
     
@@ -165,6 +177,9 @@ def compute_deltaG_vs_time(colvar_file, hills_file, args, n_blocks=10):
     Divide la simulación en bloques y calcula ΔG acumulativo.
     Convergencia se indica cuando ΔG se estabiliza.
     
+    HILLS se carga una sola vez y se filtra por tiempo en cada bloque
+    para evitar re-lecturas costosas en archivos grandes.
+    
     Args:
         colvar_file: Ruta al archivo COLVAR.
         hills_file: Ruta al archivo HILLS.
@@ -175,6 +190,7 @@ def compute_deltaG_vs_time(colvar_file, hills_file, args, n_blocks=10):
         dict: Tiempos y valores de ΔG.
     """
     colvar = load_plumed_file(colvar_file)
+    hills_all = load_plumed_file(hills_file)  # Cargar UNA sola vez
     
     time = colvar[:, 0]
     total_time = time[-1]
@@ -188,46 +204,41 @@ def compute_deltaG_vs_time(colvar_file, hills_file, args, n_blocks=10):
     # Para cada bloque, reconstruir FES parcial
     deltaG_values = []
     
-    for t_block in block_times:
-        # Filtrar HILLS hasta t_block
-        hills = load_plumed_file(hills_file)
-        mask = hills[:, 0] <= t_block
-        if not np.any(mask):
-            continue
-        
-        hills_block = hills[mask]
-        
-        # Escribir HILLS filtrado temporalmente
-        temp_hills = f"/tmp/hills_block_{t_block:.0f}.dat"
-        np.savetxt(temp_hills, hills_block, fmt='%.6f')
-        
-        # sum_hills parcial
-        temp_fes = f"/tmp/fes_block_{t_block:.0f}.dat"
-        cmd = [
-            "plumed", "sum_hills",
-            "--hills", temp_hills,
-            "--outfile", temp_fes,
-            "--mintozero",
-        ]
-        if args.kt:
-            cmd.extend(["--kt", str(args.kt)])
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if result.returncode == 0 and os.path.exists(temp_fes):
-            try:
-                fes = load_plumed_file(temp_fes)
-                # ΔG = max(FES) - min(FES) o diferencia entre mínimos
-                fes_values = fes[:, -1]  # Última columna = energía libre
-                delta_g = np.max(fes_values) - np.min(fes_values)
-                deltaG_values.append((t_block, delta_g))
-            except Exception:
-                pass
-        
-        # Limpiar temporales
-        for f in [temp_hills, temp_fes]:
-            if os.path.exists(f):
-                os.remove(f)
+    with tempfile.TemporaryDirectory(prefix="metad_deltaG_") as tmpdir:
+        for t_block in block_times:
+            # Filtrar HILLS hasta t_block (reutilizando array cargado)
+            mask = hills_all[:, 0] <= t_block
+            if not np.any(mask):
+                continue
+            
+            hills_block = hills_all[mask]
+            
+            # Escribir HILLS filtrado a directorio temporal seguro
+            temp_hills = os.path.join(tmpdir, f"hills_block_{t_block:.0f}.dat")
+            np.savetxt(temp_hills, hills_block, fmt='%.6f')
+            
+            # sum_hills parcial
+            temp_fes = os.path.join(tmpdir, f"fes_block_{t_block:.0f}.dat")
+            cmd = [
+                "plumed", "sum_hills",
+                "--hills", temp_hills,
+                "--outfile", temp_fes,
+                "--mintozero",
+            ]
+            if args.kt:
+                cmd.extend(["--kt", str(args.kt)])
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0 and os.path.exists(temp_fes):
+                try:
+                    fes = load_plumed_file(temp_fes)
+                    # ΔG = max(FES) - min(FES) o diferencia entre mínimos
+                    fes_values = fes[:, -1]  # Última columna = energía libre
+                    delta_g = np.max(fes_values) - np.min(fes_values)
+                    deltaG_values.append((t_block, delta_g))
+                except Exception:
+                    pass
     
     return {
         'times': [dg[0] for dg in deltaG_values],

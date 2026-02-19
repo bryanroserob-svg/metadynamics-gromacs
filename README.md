@@ -206,3 +206,21 @@ por el bias. Considere reducir `HEIGHT` o agregar `WALLS`.
 - **Funnel Metadynamics**: para calcular ΔG de unión proteína–ligando.
 - **Reweighting Tiwary-Parrinello**: calcular observables no sesgados del FES.
 - **MDAnalysis**: análisis de trayectoria avanzado (clustering, contactos, SASA).
+
+---
+
+## Nota de Migración
+
+Si actualizas desde una versión anterior del pipeline:
+
+- **Renombrar carpeta de gráficos**: las versiones anteriores creaban `06_plots/`
+  dentro de cada directorio de simulación. Ahora la carpeta correcta es `07_plots/`.
+  Si tienes simulaciones previas, renombra:
+
+  ```bash
+  # Para cada directorio de simulación existente:
+  mv METAD_RUN_*/06_plots METAD_RUN_*/07_plots 2>/dev/null || true
+  ```
+
+- **Timestep configurable**: el argumento `--dt` ahora se pasa al generador de PLUMED.
+  Si usas `dt ≠ 0.002 ps`, los reportes de PACE en ps serán ahora correctos.

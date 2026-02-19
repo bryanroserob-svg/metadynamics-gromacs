@@ -379,6 +379,9 @@ def plot_deltaG_convergence(dg_file, output_dir):
     if data.size == 0:
         return
     
+    # Garantizar 2D: np.loadtxt devuelve 1D para una sola fila
+    data = np.atleast_2d(data)
+    
     time = data[:, 0]
     deltaG = data[:, 1]
     

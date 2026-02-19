@@ -101,7 +101,10 @@ def generate_cv_block(cv_configs):
             lines.append(f"# CV{i+1}: RMSD respecto a {ref_file}")
             lines.append(f"# IMPORTANT: El archivo de referencia debe estar en formato PDB")
             lines.append(f"# y contener las mismas coordenadas de átomos que el sistema.")
-            lines.append(f"{cv_name}: RMSD REFERENCE={ref_file} TYPE=OPTIMAL")
+            if atom_selection != '1-1000' and atom_selection != ref_file:
+                lines.append(f"{cv_name}: RMSD REFERENCE={ref_file} TYPE=OPTIMAL")
+            else:
+                lines.append(f"{cv_name}: RMSD REFERENCE={ref_file} TYPE=OPTIMAL")
             
         elif cv_type == 'TORSION':
             # Ángulo dihedral (4 átomos)
@@ -158,7 +161,7 @@ def generate_metad_block(cv_names, args):
     lines.append(f"#   HEIGHT = {args.height} kJ/mol")
     lines.append(f"#     → Altura INICIAL de gaussianas (decrece con WT)")
     lines.append(f"#   PACE = {args.pace}")
-    lines.append(f"#     → Deposición cada {args.pace} steps ({args.pace * 0.002:.1f} ps)")
+    lines.append(f"#     → Deposición cada {args.pace} steps ({args.pace * args.dt:.1f} ps)")
     lines.append("")
     
     # Construir ARG y SIGMA
@@ -374,6 +377,8 @@ Ejemplos de uso:
                              'Recomendado: 10-20 para la mayoría de sistemas.')
     parser.add_argument('--temp', type=float, default=300,
                         help='Temperatura del sistema en K (default: 300)')
+    parser.add_argument('--dt', type=float, default=0.002,
+                        help='Timestep en ps (default: 0.002). Usado para reportar PACE en ps.')
     
     # Grid
     parser.add_argument('--grid-min', dest='grid_min', default=None,
@@ -428,7 +433,17 @@ Ejemplos de uso:
             if cv_type_upper == 'DISTANCE' or cv_type_upper == 'COORDINATION':
                 # Necesita 2 grupos de átomos
                 if atom_idx + 1 < len(all_atoms):
-                    cv_atoms_list = [all_atoms[atom_idx], all_atoms[atom_idx + 1]]
+                    atom1 = all_atoms[atom_idx]
+                    atom2 = all_atoms[atom_idx + 1]
+                    if not validate_atom_selection(atom1):
+                        print(f"ERROR: Formato de átomos inválido para {cv_type} grupo 1: '{atom1}'"
+                              f"\n  Formatos válidos: '1-50' (rango) o '1,2,3' (lista)", file=sys.stderr)
+                        sys.exit(1)
+                    if not validate_atom_selection(atom2):
+                        print(f"ERROR: Formato de átomos inválido para {cv_type} grupo 2: '{atom2}'"
+                              f"\n  Formatos válidos: '1-50' (rango) o '1,2,3' (lista)", file=sys.stderr)
+                        sys.exit(1)
+                    cv_atoms_list = [atom1, atom2]
                     atom_idx += 2
                 else:
                     print(f"ERROR: {cv_type} requiere 2 --cv-atoms, faltan átomos", file=sys.stderr)
@@ -436,7 +451,12 @@ Ejemplos de uso:
             elif cv_type_upper == 'TORSION':
                 # Necesita 1 grupo con 4 átomos
                 if atom_idx < len(all_atoms):
-                    cv_atoms_list = [all_atoms[atom_idx]]
+                    torsion_val = all_atoms[atom_idx]
+                    if not validate_atom_selection(torsion_val):
+                        print(f"ERROR: Formato de átomos inválido para TORSION: '{torsion_val}'"
+                              f"\n  Formato esperado: '5,7,9,15' (4 átomos)", file=sys.stderr)
+                        sys.exit(1)
+                    cv_atoms_list = [torsion_val]
                     atom_idx += 1
                 else:
                     print(f"ERROR: TORSION requiere 1 --cv-atoms con 4 átomos", file=sys.stderr)
@@ -492,7 +512,7 @@ Ejemplos de uso:
     print(f"  Parámetros WTMetaD:")
     print(f"    σ = {args.sigma}")
     print(f"    h₀ = {args.height} kJ/mol")
-    print(f"    pace = {args.pace} steps ({args.pace * 0.002:.1f} ps)")
+    print(f"    pace = {args.pace} steps ({args.pace * args.dt:.1f} ps)")
     print(f"    γ = {args.biasfactor}")
     print(f"    T_eff = {args.biasfactor * args.temp:.0f} K")
     if args.walkers and args.walkers > 1:
